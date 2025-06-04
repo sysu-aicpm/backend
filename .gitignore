@@ -61,6 +61,12 @@ local_settings.py
 db.sqlite3
 db.sqlite3-journal
 
+# Django项目特定
+/static/
+/staticfiles/
+/media/
+/logs/
+
 # Flask stuff:
 instance/
 .webassets-cache
@@ -172,3 +178,5 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+docs/
