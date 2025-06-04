@@ -248,5 +248,10 @@ LOGGING = {
             'level': 'DEBUG',
             'propagate': False,
         },
+        'utils.device_client': {
+            'handlers': ['file', 'console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
     },
 }
