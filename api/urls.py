@@ -19,9 +19,9 @@ from .views import (
 
 router = DefaultRouter()
 # Comment out ViewSet registrations for now
-# router.register(r'user-groups', UserGroupViewSet, basename='usergroup')
-# router.register(r'device-groups', DeviceGroupViewSet, basename='devicegroup')
-# router.register(r'devices', DeviceViewSet, basename='device')
+router.register(r'user-groups', UserGroupViewSet, basename='usergroup')
+router.register(r'device-groups', DeviceGroupViewSet, basename='devicegroup')
+router.register(r'devices', DeviceViewSet, basename='device')
 
 app_name = 'api'
 
