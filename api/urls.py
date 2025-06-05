@@ -10,12 +10,12 @@ from rest_framework_simplejwt.views import (
 )
 
 # Comment out complex views for now, will enable when implementing device interaction
-# from .views import (
-#     RegisterView, LoginView, UserInfoView,
-#     UserPermissionsView, GroupPermissionsView,
-#     UserGroupViewSet, DeviceGroupViewSet, DeviceViewSet,
-#     DeviceOverviewView, DeviceDetailView, DeviceHeartbeatView
-# )
+from .views import (
+    RegisterView, UserInfoView,
+    UserPermissionsView, GroupPermissionsView,
+    UserGroupViewSet, DeviceGroupViewSet, DeviceViewSet,
+    DeviceOverviewView, DeviceDetailView, DeviceHeartbeatView
+)
 
 router = DefaultRouter()
 # Comment out ViewSet registrations for now
@@ -31,12 +31,19 @@ urlpatterns = [
     path('auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('auth/verify/', TokenVerifyView.as_view(), name='token_verify'),
 
-    # Comment out complex endpoints for now
-    # path('auth/register/', RegisterView.as_view(), name='auth-register'),
-    # path('auth/me/', UserInfoView.as_view(), name='auth-me'),
-    # path('permissions/user/<int:user_id>/', UserPermissionsView.as_view(), name='user-permissions'),
-    # path('devices/overview/', DeviceOverviewView.as_view(), name='device-overview'),
+    # Custom Auth views
+    path('auth/register/', RegisterView.as_view(), name='auth-register'),
+    path('auth/me/', UserInfoView.as_view(), name='auth-me'),
 
-    # DRF router URLs
+    # Permissions views
+    path('permissions/user/<int:user_id>/', UserPermissionsView.as_view(), name='user-permissions'),
+    path('permissions/group/<int:group_id>/', GroupPermissionsView.as_view(), name='group-permissions'), # Assuming group_id is int
+
+    # Device specific views (not part of DeviceViewSet default routes)
+    path('devices/overview/', DeviceOverviewView.as_view(), name='device-overview'),
+    path('devices/<int:pk>/detail/', DeviceDetailView.as_view(), name='device-detail'), # pk is conventional for detail views
+    path('devices/heartbeat/', DeviceHeartbeatView.as_view(), name='device-heartbeat'),
+
+    # DRF router URLs should be included last for ViewSets
     path('', include(router.urls)),
 ]

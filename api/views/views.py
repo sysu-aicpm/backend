@@ -12,12 +12,12 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken  # For JWT
 # from rest_framework.authtoken.models import Token # For DRF's default token
 
-from .models import (
+from ..models import (
     Device, DeviceGroup, UserGroup,
     UserDevicePermission, GroupDevicePermission, PermissionLevel,
     DeviceLog, DeviceUsageRecord
 )
-from .serializers import (
+from ..serializers import (
     RegisterSerializer, LoginSerializer, UserSerializer, UserInfoUpdateSerializer,
     DeviceSerializer, DeviceCreateSerializer, DeviceInfoUpdateSerializer, DeviceInfoDictUpdateSerializer,
     DeviceOverviewSerializer, DeviceDetailSerializer, DeviceHeartbeatSerializer,
@@ -25,8 +25,8 @@ from .serializers import (
     UserDevicePermissionInfoSerializer, GroupDevicePermissionInfoSerializer,
     UserPermissionModificationSerializer, GroupPermissionModificationSerializer
 )
-from .permissions import IsAdminUser, CanViewDevice, CanMonitorDevice, CanControlDevice
-from .utils import custom_api_response
+from ..permissions import IsAdminUser, CanViewDevice, CanMonitorDevice, CanControlDevice
+from ..utils import custom_api_response
 
 User = get_user_model()
 
@@ -81,27 +81,6 @@ class RegisterView(generics.CreateAPIView):
             error_message = serializer.errors[first_error_key][0]
             return custom_api_response(False, f"注册失败: {error_message}", error_code="VALIDATION_ERROR",
                                        details=serializer.errors, status_code=status.HTTP_400_BAD_REQUEST)
-
-
-class LoginView(generics.GenericAPIView):
-    permission_classes = [AllowAny]
-    serializer_class = LoginSerializer
-
-    def post(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        if serializer.is_valid():
-            user = serializer.validated_data['user']
-            tokens = get_tokens_for_user(user)  # JWT
-            # For DRF's default token:
-            # token, created = Token.objects.get_or_create(user=user)
-            # return custom_api_response(True, "登录成功", data={'token': token.key})
-            return custom_api_response(True, "登录成功",
-                                       data={'token': tokens['access'], 'refresh_token': tokens['refresh']})
-        else:
-            error_message = "登录失败: " + serializer.errors.get('non_field_errors', ["无效的凭据"])[0]
-            return custom_api_response(False, error_message, error_code="LOGIN_FAILED", details=serializer.errors,
-                                       status_code=status.HTTP_401_UNAUTHORIZED)
-
 
 class UserInfoView(generics.RetrieveUpdateAPIView):
     serializer_class = UserSerializer

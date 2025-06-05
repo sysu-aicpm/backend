@@ -1,7 +1,7 @@
 # api/serializers.py
 from rest_framework import serializers
 from django.contrib.auth import get_user_model, authenticate
-from .models import (
+from ..models import (
     Device, DeviceGroup, UserGroup,
     UserDevicePermission, GroupDevicePermission, PermissionLevel,
     DeviceLog, DeviceUsageRecord
