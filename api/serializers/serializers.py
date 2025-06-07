@@ -151,7 +151,7 @@ class DeviceInfoDictUpdateSerializer(serializers.Serializer):  # 对应你文档
 class DeviceOverviewSerializer(serializers.ModelSerializer):
     class Meta:
         model = Device
-        fields = ('id', 'name', 'status', 'device_type')  # 根据你的 "概要" 定义
+        fields = ('id', 'name', 'status', 'device_type', 'ip_address', 'port', 'device_identifier')  # 包含网络配置信息
 
 
 class DeviceDetailSerializer(serializers.ModelSerializer):

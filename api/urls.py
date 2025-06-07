@@ -9,8 +9,8 @@ from rest_framework_simplejwt.views import (
     TokenVerifyView,
 )
 
-# Comment out complex views for now, will enable when implementing device interaction
-from .views import (
+# Import all views for device interaction
+from .views.views import (
     RegisterView, UserInfoView,
     UserPermissionsView, GroupPermissionsView,
     UserGroupViewSet, DeviceGroupViewSet, DeviceViewSet,
@@ -18,7 +18,7 @@ from .views import (
 )
 
 router = DefaultRouter()
-# Comment out ViewSet registrations for now
+# Register ViewSets for device interaction
 router.register(r'user-groups', UserGroupViewSet, basename='usergroup')
 router.register(r'device-groups', DeviceGroupViewSet, basename='devicegroup')
 router.register(r'devices', DeviceViewSet, basename='device')

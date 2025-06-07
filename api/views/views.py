@@ -385,17 +385,196 @@ class DeviceViewSet(viewsets.ModelViewSet):  # 不使用 BaseViewSet，因为权
     # GET /devices/discover
     @action(detail=False, methods=['get'], permission_classes=[IsAdminUser])
     def discover(self, request):
-        # 这里的设备发现逻辑需要你自己实现
-        # 例如，扫描局域网，或调用特定的服务
-        # 以下是一个模拟的响应
-        discovered_devices_data = [
-            {"name": "智能灯泡-A01", "ip": "192.168.1.100", "device_type": "light",
-             "device_identifier": "mac:aa:bb:cc:00:11:22"},
-            {"name": "客厅空调-B02", "ip": "192.168.1.101", "device_type": "air_conditioner",
-             "device_identifier": "sn:空调SN12345"},
-        ]
-        # 实际应用中，这些设备信息可能还需要与数据库中已存在的设备进行比对
-        return custom_api_response(True, "设备发现（模拟）", data=discovered_devices_data)
+        """发现局域网中的virtual-device设备"""
+        from utils.device_client import get_device_client
+
+        client = get_device_client()
+        discovered_devices_data = []
+
+        try:
+            # 扫描常见的IP范围和端口
+            ip_ranges = [
+                "127.0.0.1",  # 本地测试
+                "localhost",  # 本地测试
+            ]
+
+            # 可以从配置中获取更多IP范围
+            custom_ranges = request.GET.get('ip_ranges', '').split(',')
+            if custom_ranges and custom_ranges[0]:
+                ip_ranges.extend([ip.strip() for ip in custom_ranges])
+
+            port = 5000  # virtual-device默认端口
+
+            for ip in ip_ranges:
+                if not ip:
+                    continue
+
+                try:
+                    # 尝试查询设备信息
+                    result = client.query_device(
+                        device_ip=ip,
+                        device_port=port,
+                        keys=["device_id", "device_type", "power", "status"]
+                    )
+
+                    if result.success and result.data:
+                        device_info = result.data
+                        device_identifier = device_info.get("device_id", f"{ip}:{port}")
+
+                        # 检查设备是否已存在于数据库
+                        existing_device = Device.objects.filter(
+                            device_identifier=device_identifier
+                        ).first()
+
+                        discovered_device = {
+                            "device_identifier": device_identifier,
+                            "name": f"{device_info.get('device_type', 'Unknown')} ({device_identifier})",
+                            "ip": ip,
+                            "port": port,
+                            "device_type": device_info.get("device_type", "unknown"),
+                            "status": device_info.get("status", "unknown"),
+                            "power": device_info.get("power", 0),
+                            "already_added": existing_device is not None,
+                            "database_id": existing_device.id if existing_device else None
+                        }
+
+                        discovered_devices_data.append(discovered_device)
+
+                except Exception as e:
+                    # 单个IP扫描失败不影响其他IP
+                    continue
+
+            if discovered_devices_data:
+                return custom_api_response(
+                    True,
+                    f"发现 {len(discovered_devices_data)} 个设备",
+                    data=discovered_devices_data
+                )
+            else:
+                return custom_api_response(
+                    True,
+                    "未发现任何设备，请确保virtual-device正在运行",
+                    data=[]
+                )
+
+        except Exception as e:
+            return custom_api_response(
+                False,
+                f"设备发现过程中发生错误: {str(e)}",
+                error_code="DISCOVERY_ERROR"
+            )
+
+    # POST /devices/sync
+    @action(detail=False, methods=['post'], permission_classes=[IsAdminUser])
+    def sync(self, request):
+        """同步发现的设备到数据库"""
+        device_data = request.data.get('device_data')
+
+        if not device_data:
+            return custom_api_response(False, "缺少设备数据", error_code="MISSING_DEVICE_DATA")
+
+        from utils.device_client import get_device_client
+        client = get_device_client()
+
+        try:
+            synced_devices = []
+            errors = []
+
+            # 如果传入的是单个设备，转换为列表
+            if isinstance(device_data, dict):
+                device_data = [device_data]
+
+            for device_info in device_data:
+                try:
+                    device_identifier = device_info.get('device_identifier')
+                    ip = device_info.get('ip')
+                    port = device_info.get('port', 5000)
+
+                    if not device_identifier or not ip:
+                        errors.append(f"设备信息不完整: {device_info}")
+                        continue
+
+                    # 检查设备是否已存在
+                    existing_device = Device.objects.filter(
+                        device_identifier=device_identifier
+                    ).first()
+
+                    if existing_device:
+                        # 更新现有设备
+                        existing_device.ip_address = ip
+                        existing_device.port = port
+                        existing_device.name = device_info.get('name', existing_device.name)
+                        existing_device.device_type = device_info.get('device_type', existing_device.device_type)
+                        existing_device.save()
+                        synced_devices.append({
+                            'action': 'updated',
+                            'device_id': existing_device.id,
+                            'device_identifier': device_identifier
+                        })
+                    else:
+                        # 创建新设备
+                        new_device = Device.objects.create(
+                            name=device_info.get('name', f"Device {device_identifier}"),
+                            device_identifier=device_identifier,
+                            ip_address=ip,
+                            port=port,
+                            device_type=device_info.get('device_type', 'unknown'),
+                            status=device_info.get('status', 'offline')
+                        )
+                        synced_devices.append({
+                            'action': 'created',
+                            'device_id': new_device.id,
+                            'device_identifier': device_identifier
+                        })
+
+                    # 尝试获取设备的最新状态
+                    try:
+                        result = client.query_device(
+                            device_ip=ip,
+                            device_port=port,
+                            keys=["device_id", "device_type", "status", "power"]
+                        )
+
+                        if result.success and result.data:
+                            device = Device.objects.get(device_identifier=device_identifier)
+                            device.status = result.data.get('status', device.status)
+                            device.current_power_consumption = result.data.get('power', device.current_power_consumption)
+                            device.save()
+                    except Exception:
+                        # 状态同步失败不影响设备创建/更新
+                        pass
+
+                except Exception as e:
+                    errors.append(f"同步设备 {device_info.get('device_identifier', 'unknown')} 失败: {str(e)}")
+
+            result_data = {
+                'synced_devices': synced_devices,
+                'errors': errors,
+                'total_processed': len(device_data),
+                'successful': len(synced_devices),
+                'failed': len(errors)
+            }
+
+            if synced_devices:
+                return custom_api_response(
+                    True,
+                    f"成功同步 {len(synced_devices)} 个设备",
+                    data=result_data
+                )
+            else:
+                return custom_api_response(
+                    False,
+                    "没有设备被同步",
+                    error_code="NO_DEVICES_SYNCED",
+                    data=result_data
+                )
+
+        except Exception as e:
+            return custom_api_response(
+                False,
+                f"设备同步过程中发生错误: {str(e)}",
+                error_code="SYNC_ERROR"
+            )
 
     # POST /devices/{device_id}/control
     @action(detail=True, methods=['post'],
@@ -404,52 +583,65 @@ class DeviceViewSet(viewsets.ModelViewSet):  # 不使用 BaseViewSet，因为权
         device = self.get_object()  # get_object 会自动处理 404，CanControlDevice 会检查权限
 
         action_name = request.data.get('action')
-        parameters = request.data.get('parameters')
+        parameters = request.data.get('parameters', {})
 
         if not action_name:
             return custom_api_response(False, "缺少操作参数 'action'", error_code="MISSING_ACTION")
 
-        # 在这里，你需要实现具体的设备控制逻辑
-        # 这可能涉及到与设备通过网络通信 (HTTP, MQTT, CoAP 等)
-        # 以下是一个非常简化的模拟
-        success_control = False
-        control_message = ""
+        # 检查设备是否有IP和端口信息
+        if not device.ip_address or not device.port:
+            return custom_api_response(False, f"设备 {device.name} 缺少网络配置信息", error_code="DEVICE_CONFIG_MISSING")
 
-        if action_name == "turn_on":
-            # 实际控制逻辑: device.turn_on_physical_device()
-            device.status = 'online'  # 模拟状态改变
-            device.save()
-            success_control = True
-            control_message = f"设备 {device.name} 已开启"
-        elif action_name == "turn_off":
-            device.status = 'offline'
-            device.save()
-            success_control = True
-            control_message = f"设备 {device.name} 已关闭"
-        elif action_name == "set_temperature" and device.device_type == "air_conditioner":
-            temp = parameters.get("temperature") if parameters else None
-            if temp is not None:
-                # 实际控制逻辑: device.set_temp_physical_device(temp)
-                # 可以在 Device 模型中添加一个 extra_data: JSONField 来存这些状态
-                control_message = f"空调 {device.name} 温度已设置为 {temp}°C"
-                success_control = True
-            else:
-                control_message = "缺少温度参数"
-        else:
-            control_message = f"不支持的操作: {action_name}"
-            return custom_api_response(False, control_message, error_code="UNSUPPORTED_ACTION")
+        # 使用设备通信客户端进行真实的设备控制
+        from utils.device_client import get_device_client
 
-        if success_control:
-            # 记录使用日志
-            DeviceUsageRecord.objects.create(
-                device=device,
-                user=request.user,
+        client = get_device_client()
+
+        try:
+            # 发送控制命令到真实设备
+            result = client.control_device(
+                device_ip=device.ip_address,
+                device_port=device.port,
                 action=action_name,
-                parameters=parameters
+                params=parameters
             )
-            return custom_api_response(True, control_message)
-        else:
-            return custom_api_response(False, control_message, error_code="CONTROL_FAILED")
+
+            if result.success:
+                # 控制成功，更新设备状态
+                control_success = result.data.get("success", False) if result.data else False
+
+                if control_success:
+                    # 根据操作类型更新设备状态
+                    if action_name in ["turn_on", "switch"] and parameters.get("state") == "on":
+                        device.status = 'online'
+                    elif action_name in ["turn_off", "switch"] and parameters.get("state") == "off":
+                        device.status = 'offline'
+
+                    device.save()
+
+                    # 记录使用日志
+                    DeviceUsageRecord.objects.create(
+                        device=device,
+                        user=request.user,
+                        action=action_name,
+                        parameters=parameters
+                    )
+
+                    control_message = f"设备 {device.name} 控制成功: {action_name}"
+                    return custom_api_response(True, control_message, data=result.data)
+                else:
+                    # 设备返回失败
+                    error_msg = result.data.get("error", "设备控制失败") if result.data else "设备控制失败"
+                    return custom_api_response(False, f"设备 {device.name} 控制失败: {error_msg}",
+                                             error_code="DEVICE_CONTROL_FAILED", details=result.data)
+            else:
+                # 通信失败
+                return custom_api_response(False, f"无法与设备 {device.name} 通信: {result.error}",
+                                         error_code="DEVICE_COMMUNICATION_FAILED")
+
+        except Exception as e:
+            # 异常处理
+            return custom_api_response(False, f"设备控制异常: {str(e)}", error_code="CONTROL_EXCEPTION")
 
 
 # GET /devices/overview
@@ -531,10 +723,14 @@ class DeviceHeartbeatView(APIView):
 
                 device.save()
 
-                # 可以选择性记录心跳为一种日志
-                # DeviceLog.objects.create(device=device, log_message=f"Heartbeat received: status {data['status']}")
+                # 记录心跳日志
+                log_message = f"心跳更新: 状态={data['status']}"
+                if 'current_power_consumption' in heartbeat_data_payload:
+                    log_message += f", 功耗={heartbeat_data_payload['current_power_consumption']}W"
 
-                return custom_api_response(True, "心跳已接收")
+                DeviceLog.objects.create(device=device, log_message=log_message)
+
+                return custom_api_response(True, f"设备 {device_identifier} 心跳已接收并更新")
             except Device.DoesNotExist:
                 return custom_api_response(False, f"设备标识符 {device_identifier} 未找到",
                                            error_code="DEVICE_NOT_FOUND", status_code=status.HTTP_404_NOT_FOUND)
