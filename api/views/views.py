@@ -301,7 +301,7 @@ class UserGroupViewSet(BaseViewSet):  # 使用 BaseViewSet 来继承默认的 ad
             return custom_api_response(
                 True, 
                 f"用户组 {group_name} 已成功删除", 
-                status_code=status.HTTP_204_NO_CONTENT
+                status_code=status.HTTP_200_OK
             )
             
         except Exception as e:
