@@ -267,6 +267,47 @@ class UserGroupViewSet(BaseViewSet):  # 使用 BaseViewSet 来继承默认的 ad
                                                f"用户 {user_to_remove.email} (管理员) 已从 public 组移除，但未被删除。")
 
         return custom_api_response(True, f"用户 {user_to_remove.email} 已从用户组 {user_group.name} 移除")
+    
+    # DELETE /user-groups/{group_id} (删除用户组)
+    def destroy(self, request, *args, **kwargs):
+        user_group = self.get_object()
+        group_name = user_group.name
+        
+        try:
+            # TODO! 检查是否为特殊组（如 public 组）
+            
+            # 检查组中是否还有成员
+            if user_group.members.exists():
+                return custom_api_response(
+                    False, 
+                    f"用户组 {group_name} 中还有成员，请先移除所有成员后再删除", 
+                    error_code="GROUP_HAS_MEMBERS"
+                )
+            
+            # 检查组是否还有设备组权限
+            from ..models import GroupDevicePermission
+            if GroupDevicePermission.objects.filter(user_group=user_group).exists():
+                return custom_api_response(
+                    False, 
+                    f"用户组 {group_name} 仍有设备权限，请先移除所有权限后再删除", 
+                    error_code="GROUP_HAS_PERMISSIONS"
+                )
+            
+            # 执行删除
+            user_group.delete()
+            
+            return custom_api_response(
+                True, 
+                f"用户组 {group_name} 已成功删除", 
+                status_code=status.HTTP_204_NO_CONTENT
+            )
+            
+        except Exception as e:
+            return custom_api_response(
+                False, 
+                f"删除用户组失败: {str(e)}", 
+                error_code="GROUP_DELETION_FAILED"
+            )
 
 
 # --- 设备组 (Device Groups) ---
