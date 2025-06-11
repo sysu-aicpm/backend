@@ -744,6 +744,157 @@ class DeviceViewSet(viewsets.ModelViewSet):  # 不使用 BaseViewSet，因为权
         except Exception as e:
             # 异常处理
             return custom_api_response(False, f"设备控制异常: {str(e)}", error_code="CONTROL_EXCEPTION")
+        
+    # 在 DeviceViewSet 类中添加以下方法
+
+    @action(detail=True, methods=['get'],url_path="/discover/", permission_classes=[IsAdminUser])
+    def discover_ssdp(self, request):
+        """使用SSDP协议发现局域网中的设备"""
+        print("reach")
+        try:
+            from ssdpy import SSDPClient
+            import re
+            from urllib.parse import urlparse
+            from utils.device_client import get_device_client
+            
+            # 创建SSDP客户端
+            # 仅本机，防止干扰局域网其它设备
+            client = SSDPClient(address="127.0.0.1",timeout=10,ttl=1)
+            
+            
+            discovered_devices_data = []
+            
+            print("开始SSDP设备发现...")
+            
+            # 执行SSDP搜索
+            devices = client.m_search(st="ssdp:all", mx=30)
+            
+            print(f"SSDP搜索返回 {len(devices)} 个响应")
+            
+            for device in devices:
+                try:
+                    # 提取设备信息
+                    location = device.get('location', '')
+                    st = device.get('st', '')
+                    usn = device.get('usn', '')
+                    
+                    if not location:
+                        continue
+                    
+                    # 解析location URL获取IP和端口
+                    parsed_url = urlparse(location)
+                    device_ip = parsed_url.hostname
+                    device_port = parsed_url.port or 80
+                    
+                    # 过滤掉非目标设备（根据您的设备类型模式）
+                    if 'urn:schemas-example-com:device:' not in st:
+                        continue
+                    
+                    # 从ST中提取设备类型
+                    # ST格式: urn:schemas-example-com:device:VirtualDevice:1
+                    device_type_match = re.search(r'urn:schemas-example-com:device:([^:]+):', st)
+                    device_type = device_type_match.group(1) if device_type_match else 'unknown'
+                    
+                    # 从USN中提取设备ID
+                    # USN格式: uuid:device_id::urn:schemas-example-com:device:VirtualDevice:1
+                    device_id_match = re.search(r'uuid:([^:]+)::', usn)
+                    device_identifier = device_id_match.group(1) if device_id_match else f"{device_ip}:{device_port}"
+                    
+                    # 尝试从设备获取更详细的信息
+                    device_client = get_device_client()
+                    device_status = 'unknown'
+                    device_power = 0
+                    device_name = f"{device_type} ({device_identifier})"
+                    
+                    try:
+                        # 尝试查询设备详细信息
+                        result = device_client.query_device(
+                            device_ip=device_ip,
+                            device_port=device_port,
+                            keys=["device_id", "device_type", "power", "status", "name"]
+                        )
+                        
+                        if result.success and result.data:
+                            query_data = result.data
+                            device_status = query_data.get("status", device_status)
+                            device_power = query_data.get("power", device_power)
+                            if query_data.get("name"):
+                                device_name = query_data.get("name")
+                            # 使用查询到的device_id作为标识符（如果可用）
+                            if query_data.get("device_id"):
+                                device_identifier = query_data.get("device_id")
+                                
+                    except Exception as e:
+                        print(f"查询设备 {device_ip}:{device_port} 详细信息失败: {e}")
+                    
+                    # 检查设备是否已存在于数据库
+                    existing_device = Device.objects.filter(
+                        device_identifier=device_identifier
+                    ).first()
+                    
+                    # 如果没找到，也尝试通过IP:PORT查找
+                    if not existing_device:
+                        existing_device = Device.objects.filter(
+                            ip_address=device_ip,
+                            port=device_port
+                        ).first()
+                    
+                    discovered_device = {
+                        "device_identifier": device_identifier,
+                        "name": device_name,
+                        "ip": device_ip,
+                        "port": device_port,
+                        "device_type": device_type,
+                        "status": device_status,
+                        "power": device_power,
+                        "ssdp_location": location,
+                        "ssdp_st": st,
+                        "ssdp_usn": usn,
+                        "already_added": existing_device is not None,
+                        "database_id": existing_device.id if existing_device else None
+                    }
+                    
+                    discovered_devices_data.append(discovered_device)
+                    print(f"发现设备: {device_name} ({device_ip}:{device_port})")
+                    
+                except Exception as e:
+                    print(f"处理SSDP响应时出错: {e}")
+                    continue
+            
+            # 去重（基于device_identifier）
+            unique_devices = {}
+            for device in discovered_devices_data:
+                identifier = device['device_identifier']
+                if identifier not in unique_devices:
+                    unique_devices[identifier] = device
+            
+            discovered_devices_data = list(unique_devices.values())
+            
+            if discovered_devices_data:
+                return custom_api_response(
+                    True,
+                    f"通过SSDP发现 {len(discovered_devices_data)} 个设备",
+                    data=discovered_devices_data
+                )
+            else:
+                return custom_api_response(
+                    True,
+                    "未通过SSDP发现任何兼容设备",
+                    data=[]
+                )
+                
+        except ImportError:
+            return custom_api_response(
+                False,
+                "SSDP库未安装，请安装 ssdpy: pip install ssdpy",
+                error_code="MISSING_DEPENDENCY"
+            )
+        except Exception as e:
+            return custom_api_response(
+                False,
+                f"SSDP设备发现过程中发生错误: {str(e)}",
+                error_code="SSDP_DISCOVERY_ERROR"
+            )
 
 
 # GET /devices/overview
