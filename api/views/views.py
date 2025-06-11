@@ -221,6 +221,9 @@ class UserGroupViewSet(BaseViewSet):  # 使用 BaseViewSet 来继承默认的 ad
 
     permission_classes = [IsAdminUser]
 
+    def get_permissions(self):
+        return [IsAdminUser()]
+
     def perform_create(self, serializer):
         # serializer.save(created_by=self.request.user) # 如果有 created_by 字段
         serializer.save()
@@ -272,6 +275,9 @@ class DeviceGroupViewSet(BaseViewSet):
     serializer_class = DeviceGroupSerializer
 
     permission_classes = [IsAdminUser]
+
+    def get_permissions(self):
+        return [IsAdminUser()]
 
     # 加入设备到组
     @action(detail=True, methods=['post'], url_path='devices', serializer_class=serializers.Serializer)
