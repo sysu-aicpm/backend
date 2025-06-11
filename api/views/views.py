@@ -484,88 +484,6 @@ class DeviceViewSet(viewsets.ModelViewSet):  # 不使用 BaseViewSet，因为权
         except Exception as e:
             return custom_api_response(False, f"设备移除失败: {str(e)}", error_code="DEVICE_DELETION_FAILED")
 
-    # GET /devices/discover
-    @action(detail=False, methods=['get'], permission_classes=[IsAdminUser])
-    def discover(self, request):
-        """发现局域网中的virtual-device设备"""
-        from utils.device_client import get_device_client
-
-        client = get_device_client()
-        discovered_devices_data = []
-
-        try:
-            # 扫描常见的IP范围和端口
-            ip_ranges = [
-                "127.0.0.1",  # 本地测试
-                "localhost",  # 本地测试
-            ]
-
-            # 可以从配置中获取更多IP范围
-            custom_ranges = request.GET.get('ip_ranges', '').split(',')
-            if custom_ranges and custom_ranges[0]:
-                ip_ranges.extend([ip.strip() for ip in custom_ranges])
-
-            port = 5000  # virtual-device默认端口
-
-            for ip in ip_ranges:
-                if not ip:
-                    continue
-
-                try:
-                    # 尝试查询设备信息
-                    result = client.query_device(
-                        device_ip=ip,
-                        device_port=port,
-                        keys=["device_id", "device_type", "power", "status"]
-                    )
-
-                    if result.success and result.data:
-                        device_info = result.data
-                        device_identifier = device_info.get("device_id", f"{ip}:{port}")
-
-                        # 检查设备是否已存在于数据库
-                        existing_device = Device.objects.filter(
-                            device_identifier=device_identifier
-                        ).first()
-
-                        discovered_device = {
-                            "device_identifier": device_identifier,
-                            "name": f"{device_info.get('device_type', 'Unknown')} ({device_identifier})",
-                            "ip": ip,
-                            "port": port,
-                            "device_type": device_info.get("device_type", "unknown"),
-                            "status": device_info.get("status", "unknown"),
-                            "power": device_info.get("power", 0),
-                            "already_added": existing_device is not None,
-                            "database_id": existing_device.id if existing_device else None
-                        }
-
-                        discovered_devices_data.append(discovered_device)
-
-                except Exception as e:
-                    # 单个IP扫描失败不影响其他IP
-                    continue
-
-            if discovered_devices_data:
-                return custom_api_response(
-                    True,
-                    f"发现 {len(discovered_devices_data)} 个设备",
-                    data=discovered_devices_data
-                )
-            else:
-                return custom_api_response(
-                    True,
-                    "未发现任何设备，请确保virtual-device正在运行",
-                    data=[]
-                )
-
-        except Exception as e:
-            return custom_api_response(
-                False,
-                f"设备发现过程中发生错误: {str(e)}",
-                error_code="DISCOVERY_ERROR"
-            )
-
     # POST /devices/sync
     @action(detail=False, methods=['post'], permission_classes=[IsAdminUser])
     def sync(self, request):
@@ -744,13 +662,12 @@ class DeviceViewSet(viewsets.ModelViewSet):  # 不使用 BaseViewSet，因为权
         except Exception as e:
             # 异常处理
             return custom_api_response(False, f"设备控制异常: {str(e)}", error_code="CONTROL_EXCEPTION")
-        
-    # 在 DeviceViewSet 类中添加以下方法
-
-    @action(detail=True, methods=['get'],url_path="/discover/", permission_classes=[IsAdminUser])
-    def discover_ssdp(self, request):
+    
+    # GET /devices/discover
+    @action(detail=False, methods=['get'], permission_classes=[IsAdminUser])
+    def discover(self, request):
         """使用SSDP协议发现局域网中的设备"""
-        print("reach")
+        print("开始SSDP设备发现...")
         try:
             from ssdpy import SSDPClient
             import re
@@ -758,51 +675,78 @@ class DeviceViewSet(viewsets.ModelViewSet):  # 不使用 BaseViewSet，因为权
             from utils.device_client import get_device_client
             
             # 创建SSDP客户端
-            # 仅本机，防止干扰局域网其它设备
-            client = SSDPClient(address="127.0.0.1",timeout=10,ttl=1)
-            
+            client = SSDPClient(timeout=10)
             
             discovered_devices_data = []
             
-            print("开始SSDP设备发现...")
-            
             # 执行SSDP搜索
-            devices = client.m_search(st="ssdp:all", mx=30)
+            devices = client.m_search(st="ssdp:all", mx=5)
             
             print(f"SSDP搜索返回 {len(devices)} 个响应")
+            print(f"原始SSDP响应: {devices}")  # 调试信息
             
             for device in devices:
                 try:
-                    # 提取设备信息
+                    print(f"处理设备响应: {device}")  # 调试信息
+                    
+                    # 根据实际响应格式提取设备信息
+                    # 优先使用直接字段，fallback到解析location
+                    device_ip = device.get('device-ip')
+                    device_port = device.get('device-port')
+                    device_id = device.get('device-id')
+                    device_status = device.get('device-status', 'unknown')
+                    
+                    # 如果没有直接的IP/端口字段，尝试从location解析
                     location = device.get('location', '')
+                    if not device_ip and location:
+                        parsed_url = urlparse(location)
+                        device_ip = parsed_url.hostname
+                        device_port = parsed_url.port or 80
+                    
+                    # 转换端口为整数
+                    if device_port:
+                        device_port = int(device_port)
+                    else:
+                        device_port = 5000  # 默认端口
+                    
+                    # 获取设备类型
+                    nt = device.get('nt', '')
                     st = device.get('st', '')
                     usn = device.get('usn', '')
                     
-                    if not location:
+                    # 从nt或st中提取设备类型
+                    device_type = 'unknown'
+                    for field in [nt, st]:
+                        if 'urn:schemas-example-com:device:' in field:
+                            device_type_match = re.search(r'urn:schemas-example-com:device:([^:]+):', field)
+                            if device_type_match:
+                                device_type = device_type_match.group(1)
+                                break
+                    
+                    # 获取设备标识符
+                    device_identifier = device_id
+                    if not device_identifier and usn:
+                        # 从USN中提取设备ID
+                        device_id_match = re.search(r'uuid:([^:]+)::', usn)
+                        device_identifier = device_id_match.group(1) if device_id_match else None
+                    
+                    # 如果还是没有标识符，使用IP:PORT
+                    if not device_identifier:
+                        device_identifier = f"{device_ip}:{device_port}"
+                    
+                    # 过滤掉非目标设备
+                    if device_type == 'unknown' or not device_ip:
+                        print(f"跳过设备：device_type={device_type}, device_ip={device_ip}")
                         continue
                     
-                    # 解析location URL获取IP和端口
-                    parsed_url = urlparse(location)
-                    device_ip = parsed_url.hostname
-                    device_port = parsed_url.port or 80
-                    
-                    # 过滤掉非目标设备（根据您的设备类型模式）
-                    if 'urn:schemas-example-com:device:' not in st:
-                        continue
-                    
-                    # 从ST中提取设备类型
-                    # ST格式: urn:schemas-example-com:device:VirtualDevice:1
-                    device_type_match = re.search(r'urn:schemas-example-com:device:([^:]+):', st)
-                    device_type = device_type_match.group(1) if device_type_match else 'unknown'
-                    
-                    # 从USN中提取设备ID
-                    # USN格式: uuid:device_id::urn:schemas-example-com:device:VirtualDevice:1
-                    device_id_match = re.search(r'uuid:([^:]+)::', usn)
-                    device_identifier = device_id_match.group(1) if device_id_match else f"{device_ip}:{device_port}"
+                    # 标准化IP地址
+                    if device_ip == '0.0.0.0':
+                        device_ip = '127.0.0.1'
+                    elif device_ip == 'localhost':
+                        device_ip = '127.0.0.1'
                     
                     # 尝试从设备获取更详细的信息
                     device_client = get_device_client()
-                    device_status = 'unknown'
                     device_power = 0
                     device_name = f"{device_type} ({device_identifier})"
                     
@@ -820,8 +764,9 @@ class DeviceViewSet(viewsets.ModelViewSet):  # 不使用 BaseViewSet，因为权
                             device_power = query_data.get("power", device_power)
                             if query_data.get("name"):
                                 device_name = query_data.get("name")
-                            # 使用查询到的device_id作为标识符（如果可用）
-                            if query_data.get("device_id"):
+                            # 使用查询到的device_id作为标识符（如果可用且更准确）
+                            if query_data.get("device_id") and query_data.get("device_id") != device_identifier:
+                                print(f"设备ID从SSDP的 {device_identifier} 更新为查询的 {query_data.get('device_id')}")
                                 device_identifier = query_data.get("device_id")
                                 
                     except Exception as e:
@@ -848,27 +793,32 @@ class DeviceViewSet(viewsets.ModelViewSet):  # 不使用 BaseViewSet，因为权
                         "status": device_status,
                         "power": device_power,
                         "ssdp_location": location,
-                        "ssdp_st": st,
+                        "ssdp_nt": nt,
                         "ssdp_usn": usn,
                         "already_added": existing_device is not None,
                         "database_id": existing_device.id if existing_device else None
                     }
                     
                     discovered_devices_data.append(discovered_device)
-                    print(f"发现设备: {device_name} ({device_ip}:{device_port})")
+                    print(f"发现设备: {device_name} ({device_ip}:{device_port}) ID: {device_identifier}")
                     
                 except Exception as e:
                     print(f"处理SSDP响应时出错: {e}")
                     continue
             
-            # 去重（基于device_identifier）
+            # 简化的去重逻辑：仅基于device_identifier去重
             unique_devices = {}
             for device in discovered_devices_data:
                 identifier = device['device_identifier']
                 if identifier not in unique_devices:
                     unique_devices[identifier] = device
+                else:
+                    # 如果发现重复的设备标识符，保留第一个，但打印警告
+                    print(f"发现重复设备标识符 {identifier}，保留第一个实例")
             
             discovered_devices_data = list(unique_devices.values())
+            
+            print(f"去重后发现 {len(discovered_devices_data)} 个唯一设备")
             
             if discovered_devices_data:
                 return custom_api_response(
@@ -890,6 +840,7 @@ class DeviceViewSet(viewsets.ModelViewSet):  # 不使用 BaseViewSet，因为权
                 error_code="MISSING_DEPENDENCY"
             )
         except Exception as e:
+            print(f"SSDP设备发现异常: {str(e)}")
             return custom_api_response(
                 False,
                 f"SSDP设备发现过程中发生错误: {str(e)}",
