@@ -355,6 +355,56 @@ class DeviceGroupViewSet(BaseViewSet):
                 return custom_api_response(True, f"设备 {device_to_remove.name} 已从 public 组移除并被删除。")
 
         return custom_api_response(True, f"设备 {device_to_remove.name} 已从设备组 {device_group.name} 移除")
+    
+    # DELETE /device-groups/{group_id} (删除设备组)
+    def destroy(self, request, *args, **kwargs):
+        device_group = self.get_object()
+        group_name = device_group.name
+        
+        try:
+            # TODO! 检查是否为特殊组（如 public 组）
+            
+            # 检查组中是否还有设备
+            if device_group.devices.exists():
+                return custom_api_response(
+                    False, 
+                    f"设备组 {group_name} 中还有设备，请先移除所有设备后再删除", 
+                    error_code="GROUP_HAS_DEVICES"
+                )
+            
+            # 检查是否有用户组对该设备组有权限
+            from ..models import GroupDevicePermission
+            if GroupDevicePermission.objects.filter(device_group=device_group).exists():
+                return custom_api_response(
+                    False, 
+                    f"设备组 {group_name} 仍有用户组权限，请先移除所有权限后再删除", 
+                    error_code="GROUP_HAS_PERMISSIONS"
+                )
+            
+            # 检查是否有用户对该设备组有直接权限
+            from ..models import UserDeviceGroupPermission
+            if UserDeviceGroupPermission.objects.filter(device_group=device_group).exists():
+                return custom_api_response(
+                    False, 
+                    f"设备组 {group_name} 仍有用户权限，请先移除所有权限后再删除", 
+                    error_code="GROUP_HAS_USER_PERMISSIONS"
+                )
+            
+            # 执行删除
+            device_group.delete()
+            
+            return custom_api_response(
+                True, 
+                f"设备组 {group_name} 已成功删除", 
+                status_code=status.HTTP_200_OK
+            )
+            
+        except Exception as e:
+            return custom_api_response(
+                False, 
+                f"删除设备组失败: {str(e)}", 
+                error_code="GROUP_DELETION_FAILED"
+            )
 
 
 # --- 设备 (Devices) ---
