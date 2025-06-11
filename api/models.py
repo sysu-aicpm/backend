@@ -116,6 +116,18 @@ class UserDevicePermission(models.Model):
     def __str__(self):
         return f"{self.user.email} - {self.device.name}: {self.get_permission_level_display()}"
 
+# 用户对设备组的权限
+class UserDeviceGroupPermission(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='device_group_permissions')
+    device_group = models.ForeignKey(DeviceGroup, on_delete=models.CASCADE, related_name='user_permissions')
+    permission_level = models.CharField(max_length=20, choices=PermissionLevel.choices)
+
+    class Meta:
+        unique_together = ('user', 'device_group') # 一个用户对一个设备组的权限是唯一的
+
+    def __str__(self):
+        return f"{self.user.email} - {self.device_group.name}: {self.get_permission_level_display()}"
+
 # 用户组对单个设备/设备组的权限
 class GroupDevicePermission(models.Model):
     user_group = models.ForeignKey(UserGroup, on_delete=models.CASCADE, related_name='group_device_permissions')

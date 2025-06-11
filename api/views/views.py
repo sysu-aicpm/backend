@@ -14,7 +14,7 @@ from rest_framework_simplejwt.tokens import RefreshToken  # For JWT
 
 from ..models import (
     Device, DeviceGroup, UserGroup,
-    UserDevicePermission, GroupDevicePermission, PermissionLevel,
+    UserDevicePermission, UserDeviceGroupPermission, GroupDevicePermission, PermissionLevel,
     DeviceLog, DeviceUsageRecord
 )
 from ..serializers import (
@@ -23,7 +23,9 @@ from ..serializers import (
     DeviceOverviewSerializer, DeviceDetailSerializer, DeviceHeartbeatSerializer,
     DeviceGroupSerializer, UserGroupSerializer,
     UserDevicePermissionInfoSerializer, GroupDevicePermissionInfoSerializer,
-    UserPermissionModificationSerializer, GroupPermissionModificationSerializer
+    UserPermissionModificationSerializer, GroupPermissionModificationSerializer,
+    UserDeviceGroupPermissionInfoSerializer, UserDeviceGroupPermissionModificationSerializer,
+    GroupDeviceGroupPermissionInfoSerializer, GroupDeviceGroupPermissionModificationSerializer
 )
 from ..permissions import IsAdminUser, CanViewDevice, CanMonitorDevice, CanControlDevice
 from ..utils import custom_api_response
@@ -746,3 +748,107 @@ class DeviceHeartbeatView(APIView):
             except Exception as e:
                 return custom_api_response(False, f"心跳处理失败: {str(e)}", error_code="HEARTBEAT_ERROR")
         return custom_api_response(False, "心跳数据无效", error_code="VALIDATION_ERROR", details=serializer.errors)
+
+
+# --- 设备组权限管理 (Device Group Permissions) ---
+class UserDeviceGroupPermissionsView(APIView):
+    """用户对设备组的权限管理"""
+    permission_classes = [IsAdminUser]
+
+    def get(self, request, user_id, format=None):
+        """查看用户对设备组的权限"""
+        target_user = get_object_or_404(User, pk=user_id)
+
+        # 获取用户对设备组的直接权限
+        user_device_group_perms = UserDeviceGroupPermission.objects.filter(user=target_user)
+        serializer = UserDeviceGroupPermissionInfoSerializer(user_device_group_perms, many=True)
+
+        return custom_api_response(
+            True,
+            f"用户 {target_user.email} 的设备组权限获取成功",
+            data=serializer.data
+        )
+
+    def put(self, request, user_id, format=None):
+        """修改用户对设备组的权限"""
+        target_user = get_object_or_404(User, pk=user_id)
+        serializer = UserDeviceGroupPermissionModificationSerializer(data=request.data)
+
+        if serializer.is_valid():
+            data = serializer.validated_data
+            device_group_id = data['device_group_id']
+            permission_level = data['permission_level']
+
+            device_group = get_object_or_404(DeviceGroup, pk=device_group_id)
+            permission, created = UserDeviceGroupPermission.objects.update_or_create(
+                user=target_user,
+                device_group=device_group,
+                defaults={'permission_level': permission_level}
+            )
+
+            msg = "用户对设备组的权限已更新。" if not created else "用户对设备组的权限已创建。"
+            return custom_api_response(True, msg)
+
+        return custom_api_response(
+            False,
+            "权限修改失败",
+            error_code="VALIDATION_ERROR",
+            details=serializer.errors
+        )
+
+
+class GroupDeviceGroupPermissionsView(APIView):
+    """用户组对设备组的权限管理"""
+    permission_classes = [IsAdminUser]
+
+    def get(self, request, group_id, format=None):
+        """查看用户组对设备组的权限"""
+        user_group = get_object_or_404(UserGroup, pk=group_id)
+
+        # 获取用户组对设备组的权限（只查询设备组权限，不包括设备权限）
+        group_device_group_perms = GroupDevicePermission.objects.filter(
+            user_group=user_group,
+            device_group__isnull=False  # 只获取设备组权限
+        )
+        serializer = GroupDeviceGroupPermissionInfoSerializer(group_device_group_perms, many=True)
+
+        return custom_api_response(
+            True,
+            f"用户组 {user_group.name} 的设备组权限获取成功",
+            data=serializer.data
+        )
+
+    def put(self, request, group_id, format=None):
+        """修改用户组对设备组的权限"""
+        user_group = get_object_or_404(UserGroup, pk=group_id)
+        serializer = GroupDeviceGroupPermissionModificationSerializer(data=request.data)
+
+        if serializer.is_valid():
+            data = serializer.validated_data
+            device_group_id = data['device_group_id']
+            permission_level = data['permission_level']
+
+            device_group = get_object_or_404(DeviceGroup, pk=device_group_id)
+
+            # 先删除该用户组对该设备组的现有权限（如果存在）
+            GroupDevicePermission.objects.filter(
+                user_group=user_group,
+                device_group=device_group
+            ).delete()
+
+            # 创建新的权限
+            permission = GroupDevicePermission.objects.create(
+                user_group=user_group,
+                device_group=device_group,
+                device=None,  # 确保device字段为空
+                permission_level=permission_level
+            )
+
+            return custom_api_response(True, "用户组对设备组的权限已更新。")
+
+        return custom_api_response(
+            False,
+            "权限修改失败",
+            error_code="VALIDATION_ERROR",
+            details=serializer.errors
+        )

@@ -13,6 +13,7 @@ from rest_framework_simplejwt.views import (
 from .views.views import (
     RegisterView, UserInfoView, UserListView,
     UserPermissionsView, GroupPermissionsView,
+    UserDeviceGroupPermissionsView, GroupDeviceGroupPermissionsView,
     UserGroupViewSet, DeviceGroupViewSet, DeviceViewSet,
     DeviceOverviewView, DeviceDetailView, DeviceHeartbeatView
 )
@@ -39,6 +40,10 @@ urlpatterns = [
     # Permissions views
     path('permissions/user/<int:user_id>/', UserPermissionsView.as_view(), name='user-permissions'),
     path('permissions/user-groups/<int:group_id>/', GroupPermissionsView.as_view(), name='group-permissions'), # Assuming group_id is int
+
+    # Device Group Permissions views
+    path('permissions/device-groups/user/<int:user_id>/', UserDeviceGroupPermissionsView.as_view(), name='user-device-group-permissions'),
+    path('permissions/device-groups/user-groups/<int:group_id>/', GroupDeviceGroupPermissionsView.as_view(), name='group-device-group-permissions'),
 
     # Device specific views (not part of DeviceViewSet default routes)
     path('devices/overview/', DeviceOverviewView.as_view(), name='device-overview'),

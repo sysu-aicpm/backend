@@ -3,7 +3,7 @@ from rest_framework import serializers
 from django.contrib.auth import get_user_model, authenticate
 from ..models import (
     Device, DeviceGroup, UserGroup,
-    UserDevicePermission, GroupDevicePermission, PermissionLevel,
+    UserDevicePermission, UserDeviceGroupPermission, GroupDevicePermission, PermissionLevel,
     DeviceLog, DeviceUsageRecord
 )
 
@@ -255,3 +255,38 @@ class GroupPermissionModificationSerializer(serializers.Serializer):  # 和上�
         if attrs.get('device_id') and attrs.get('device_group_id'):
             raise serializers.ValidationError("不能同时提供 device_id 和 device_group_id。")
         return attrs
+
+
+# --- 设备组权限相关序列化器 ---
+class UserDeviceGroupPermissionInfoSerializer(serializers.Serializer):
+    """用于 GET /permissions/device-groups/user/{user_id} 的序列化器"""
+    id = serializers.IntegerField(source='device_group.id')
+    type = serializers.SerializerMethodField()
+    name = serializers.CharField(source='device_group.name')
+    permission = serializers.CharField(source='permission_level')
+
+    def get_type(self, obj):
+        return "device_group"
+
+
+class UserDeviceGroupPermissionModificationSerializer(serializers.Serializer):
+    """用于 PUT /permissions/device-groups/user/{user_id} 的序列化器"""
+    device_group_id = serializers.IntegerField(required=True)
+    permission_level = serializers.ChoiceField(choices=PermissionLevel.choices, required=True)
+
+
+class GroupDeviceGroupPermissionInfoSerializer(serializers.Serializer):
+    """用于 GET /permissions/device-groups/user-groups/{group_id} 的序列化器"""
+    id = serializers.IntegerField(source='device_group.id')
+    type = serializers.SerializerMethodField()
+    name = serializers.CharField(source='device_group.name')
+    permission = serializers.CharField(source='permission_level')
+
+    def get_type(self, obj):
+        return "device_group"
+
+
+class GroupDeviceGroupPermissionModificationSerializer(serializers.Serializer):
+    """用于 PUT /permissions/device-groups/user-groups/{group_id} 的序列化器"""
+    device_group_id = serializers.IntegerField(required=True)
+    permission_level = serializers.ChoiceField(choices=PermissionLevel.choices, required=True)
