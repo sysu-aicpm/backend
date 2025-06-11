@@ -38,7 +38,7 @@ urlpatterns = [
 
     # Permissions views
     path('permissions/user/<int:user_id>/', UserPermissionsView.as_view(), name='user-permissions'),
-    path('permissions/group/<int:group_id>/', GroupPermissionsView.as_view(), name='group-permissions'), # Assuming group_id is int
+    path('permissions/user-groups/<int:group_id>/', GroupPermissionsView.as_view(), name='group-permissions'), # Assuming group_id is int
 
     # Device specific views (not part of DeviceViewSet default routes)
     path('devices/overview/', DeviceOverviewView.as_view(), name='device-overview'),
