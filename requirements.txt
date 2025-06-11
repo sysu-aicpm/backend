@@ -19,6 +19,9 @@ httpx==0.28.*
 django-debug-toolbar==5.2.*
 django-extensions==3.2.*
 
+## SSDP 服务发现
+ssdpy==0.4.1
+
 # 测试 - 最新版本
 pytest-django==4.8.*
 factory-boy==3.3.*
