@@ -7,7 +7,7 @@ from .base import *
 DEBUG = True
 
 # 开发环境允许的主机
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0']
+ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1,0.0.0.0').split(',')
 
 # 开发环境中间件（添加调试工具栏）
 MIDDLEWARE += [
