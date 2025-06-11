@@ -39,6 +39,12 @@ def get_tokens_for_user(user):
         'access': str(refresh.access_token),
     }
 
+# 管理员可以获取所有用户信息
+class UserListView(generics.ListAPIView):
+    queryset = User.objects.all().order_by('id')
+    serializer_class = UserSerializer
+    permission_classes = [IsAdminUser]
+
 
 # --- 通用视图 ---
 class BaseViewSet(viewsets.ModelViewSet):
@@ -121,7 +127,7 @@ class UserPermissionsView(APIView):
         # 获取用户通过用户组获得的权限 (这部分比较复杂，需要合并和去重)
         # 为简化，这里仅返回直接分配给用户的设备权限。
         # 如果需要包含组权限，需要遍历用户的所有组，再遍历组的所有设备权限，然后合并。
-        # 你的文档似乎是指用户对【所有设备】的权限，所以这里列出用户有直接权限的设备。
+        # 文档似乎是指用户对【所有设备】的权限，所以这里列出用户有直接权限的设备。
 
         # 构建你期望的输出格式
         # { "类型": "device", "名": "device_name", "权限": "level" }
@@ -213,7 +219,7 @@ class UserGroupViewSet(BaseViewSet):  # 使用 BaseViewSet 来继承默认的 ad
     queryset = UserGroup.objects.prefetch_related('members').all()
     serializer_class = UserGroupSerializer
 
-    # permission_classes = [IsAdminUser] # BaseViewSet 会处理
+    permission_classes = [IsAdminUser]
 
     def perform_create(self, serializer):
         # serializer.save(created_by=self.request.user) # 如果有 created_by 字段
@@ -265,7 +271,7 @@ class DeviceGroupViewSet(BaseViewSet):
     queryset = DeviceGroup.objects.prefetch_related('devices').all()
     serializer_class = DeviceGroupSerializer
 
-    # permission_classes = [IsAdminUser]
+    permission_classes = [IsAdminUser]
 
     # 加入设备到组
     @action(detail=True, methods=['post'], url_path='devices', serializer_class=serializers.Serializer)
@@ -305,7 +311,7 @@ class DeviceGroupViewSet(BaseViewSet):
 # --- 设备 (Devices) ---
 class DeviceViewSet(viewsets.ModelViewSet):  # 不使用 BaseViewSet，因为权限更复杂
     queryset = Device.objects.all()
-
+    permission_classes = [IsAdminUser]
     # serializer_class = DeviceSerializer # 会根据 action 改变
 
     def get_serializer_class(self):

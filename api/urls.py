@@ -11,7 +11,7 @@ from rest_framework_simplejwt.views import (
 
 # Import all views for device interaction
 from .views.views import (
-    RegisterView, UserInfoView,
+    RegisterView, UserInfoView, UserListView,
     UserPermissionsView, GroupPermissionsView,
     UserGroupViewSet, DeviceGroupViewSet, DeviceViewSet,
     DeviceOverviewView, DeviceDetailView, DeviceHeartbeatView
@@ -34,6 +34,7 @@ urlpatterns = [
     # Custom Auth views
     path('auth/register/', RegisterView.as_view(), name='auth-register'),
     path('auth/me/', UserInfoView.as_view(), name='auth-me'),
+    path('auth/all/', UserListView.as_view(), name='user-list'),
 
     # Permissions views
     path('permissions/user/<int:user_id>/', UserPermissionsView.as_view(), name='user-permissions'),
