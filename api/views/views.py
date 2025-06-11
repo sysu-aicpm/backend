@@ -331,9 +331,6 @@ class DeviceViewSet(viewsets.ModelViewSet):  # 不使用 BaseViewSet，因为权
         return DeviceSerializer  # list, retrieve, destroy
 
     def get_permissions(self):
-        if self.action in ['discover', 'create', 'destroy', 'update', 'partial_update']:
-            return [IsAdminUser()]
-        # 对于 list (overview), retrieve (detail), control，权限在方法内部或自定义权限类中处理
         return [IsAuthenticated()]
 
     # POST /devices (添加设备)
