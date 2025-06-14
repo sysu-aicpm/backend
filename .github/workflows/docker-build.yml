@@ -2,11 +2,15 @@ name: Docker Build and Push
 
 on:
   schedule:
-    - cron: '00 15 * * *'
+    - cron: '20 07 * * *'  # 每天 UTC 时间 07:20，对应北京时间 15:20
   push:
-    tags: [ 'v*.*.*' ]
+    branches: 
+      - main
+    tags: 
+      - 'v*.*.*'
   pull_request:
-    branches: [ "main" ]
+    branches: 
+      - main
 
 env:
   REGISTRY: ghcr.io
