@@ -929,8 +929,8 @@ class DeviceHeartbeatView(APIView):
 
                 # 记录心跳日志
                 log_message = f"心跳更新: 状态={data['status']}"
-                if 'current_power_consumption' in heartbeat_data_payload:
-                    log_message += f", 功耗={heartbeat_data_payload['current_power_consumption']}W"
+                import json
+                log_message += f", 数据={json.dumps(heartbeat_data_payload, ensure_ascii=False)}"
 
                 DeviceLog.objects.create(device=device, log_message=log_message)
 
