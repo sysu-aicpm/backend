@@ -10,6 +10,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken  # For JWT
+from rest_framework_simplejwt.views import TokenRefreshView
 # from rest_framework.authtoken.models import Token # For DRF's default token
 
 from ..models import (
@@ -50,7 +51,7 @@ class UserListView(generics.ListAPIView):
 
 # --- 通用视图 ---
 class BaseViewSet(viewsets.ModelViewSet):
-    # 你可以在这里添加一些所有 ViewSet 共用的逻辑
+    # 可以在这里添加一些所有 ViewSet 共用的逻辑
     # 例如，覆盖 list, create, retrieve, update, destroy 方法以使用 custom_api_response
     # 但为了简洁，这里暂时不覆盖，除非特别需要
 
@@ -89,6 +90,69 @@ class RegisterView(generics.CreateAPIView):
             error_message = serializer.errors[first_error_key][0]
             return custom_api_response(False, f"注册失败: {error_message}", error_code="VALIDATION_ERROR",
                                        details=serializer.errors, status_code=status.HTTP_400_BAD_REQUEST)
+
+class CustomTokenRefreshView(TokenRefreshView):
+    def post(self, request, *args, **kwargs):
+        # 先验证请求数据
+        if not request.data.get('refresh'):
+            return custom_api_response(
+                False,
+                "缺少refresh字段",
+                error_code="MISSING_REFRESH_TOKEN",
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            response = super().post(request, *args, **kwargs)
+            if response.status_code == 200:
+                return custom_api_response(
+                    True,
+                    "令牌刷新成功",
+                    data={
+                        'access': response.data.get('access'),
+                        'refresh': response.data.get('refresh')  # 如果启用了ROTATE_REFRESH_TOKENS
+                    }
+                )
+            else:
+                # 处理错误情况
+                if hasattr(response, 'data') and response.data:
+                    if isinstance(response.data, dict):
+                        error_detail = response.data.get('detail', '令牌刷新失败')
+                        if 'invalid' in str(error_detail).lower() or 'token' in str(error_detail).lower():
+                            return custom_api_response(
+                                False,
+                                "无效的刷新令牌",
+                                error_code="INVALID_REFRESH_TOKEN",
+                                status_code=status.HTTP_401_UNAUTHORIZED
+                            )
+                    else:
+                        error_detail = str(response.data)
+                else:
+                    error_detail = "令牌刷新失败"
+
+                return custom_api_response(
+                    False,
+                    error_detail,
+                    error_code="TOKEN_REFRESH_FAILED",
+                    status_code=response.status_code
+                )
+        except Exception as e:
+            # 检查是否是JWT相关的异常
+            error_str = str(e).lower()
+            if 'token' in error_str and ('invalid' in error_str or 'expired' in error_str or 'decode' in error_str):
+                return custom_api_response(
+                    False,
+                    "无效的刷新令牌",
+                    error_code="INVALID_REFRESH_TOKEN",
+                    status_code=status.HTTP_401_UNAUTHORIZED
+                )
+
+            return custom_api_response(
+                False,
+                f"令牌刷新异常: {str(e)}",
+                error_code="TOKEN_REFRESH_EXCEPTION",
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 class UserInfoView(generics.RetrieveUpdateAPIView):
     serializer_class = UserSerializer

@@ -11,7 +11,7 @@ from rest_framework_simplejwt.views import (
 
 # Import all views for device interaction
 from .views.views import (
-    RegisterView, UserInfoView, UserListView,
+    RegisterView, UserInfoView, UserListView, CustomTokenRefreshView,
     UserPermissionsView, GroupPermissionsView,
     UserDeviceGroupPermissionsView, GroupDeviceGroupPermissionsView,
     UserGroupViewSet, DeviceGroupViewSet, DeviceViewSet,
@@ -29,7 +29,7 @@ app_name = 'api'
 urlpatterns = [
     # JWT authentication endpoints
     path('auth/login/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
-    path('auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('auth/refresh/', CustomTokenRefreshView.as_view(), name='token_refresh'),
     path('auth/verify/', TokenVerifyView.as_view(), name='token_verify'),
 
     # Custom Auth views
