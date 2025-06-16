@@ -14,10 +14,12 @@ User = get_user_model()
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=True, style={'input_type': 'password'})
     email = serializers.EmailField(required=True)
+    first_name = serializers.CharField(required=False, allow_blank=True, max_length=150)
+    last_name = serializers.CharField(required=False, allow_blank=True, max_length=150)
 
     class Meta:
         model = User
-        fields = ('email', 'password', 'username')  # username 可以设为和 email 一样或者自动生成
+        fields = ('email', 'password', 'username', 'first_name', 'last_name')
         extra_kwargs = {'username': {'required': False, 'allow_blank': True}}
 
     def validate_email(self, value):
@@ -32,7 +34,9 @@ class RegisterSerializer(serializers.ModelSerializer):
         user = User.objects.create_user(
             username=validated_data['username'],  # Django User model requires username
             email=validated_data['email'],
-            password=validated_data['password']
+            password=validated_data['password'],
+            first_name=validated_data.get('first_name', ''),
+            last_name=validated_data.get('last_name', '')
         )
         return user
 
