@@ -374,6 +374,51 @@ class DeviceClient:
             logger.error(error_msg)
             return DeviceResponse(success=False, error=error_msg)
 
+    def set_device_controller_url(self, device_ip: str, device_port: int) -> DeviceResponse:
+        """
+        设置设备的CONTROLLER_URL
+        Args:
+            device_ip: 设备IP地址
+            device_port: 设备端口
+        Returns:
+            DeviceResponse: 设置结果
+        """
+        controller_host = self.device_settings.get('DEVICE_CONTROLLER_HOST', 'localhost')
+        controller_port = self.device_settings.get('DEVICE_CONTROLLER_PORT', 8000)
+        controller_url = f"http://{controller_host}:{controller_port}"
+        url = f"{self._get_device_url(device_ip, device_port)}/set_controller_url"
+        payload = {"controller_url": controller_url}
+
+        for attempt in range(self.max_retries):
+            try:
+                logger.info(f"设置设备 {device_ip}:{device_port} 的CONTROLLER_URL为: {controller_url}")
+                response = self.client.post(url, json=payload)
+                result = self._handle_response(response)
+                if result.success:
+                    logger.info(f"设备 {device_ip}:{device_port} CONTROLLER_URL 设置成功")
+                    return result
+                elif response.status_code >= 500 and attempt < self.max_retries - 1:
+                    logger.warning(f"服务器错误，准备重试: {result.error}")
+                    continue
+                else:
+                    return result
+            except httpx.TimeoutException:
+                error_msg = f"设置CONTROLLER_URL超时: {device_ip}:{device_port}"
+                logger.error(error_msg)
+                if attempt == self.max_retries - 1:
+                    return DeviceResponse(success=False, error=error_msg)
+            except httpx.ConnectError:
+                error_msg = f"无法连接到设备: {device_ip}:{device_port}"
+                logger.error(error_msg)
+                if attempt == self.max_retries - 1:
+                    return DeviceResponse(success=False, error=error_msg)
+            except Exception as e:
+                error_msg = f"设置CONTROLLER_URL异常: {str(e)}"
+                logger.error(error_msg)
+                if attempt == self.max_retries - 1:
+                    return DeviceResponse(success=False, error=error_msg)
+        return DeviceResponse(success=False, error="设置CONTROLLER_URL失败，已达到最大重试次数")
+
 
 # 全局设备客户端实例
 DEVICE_CLIENT_INSTANCE = None

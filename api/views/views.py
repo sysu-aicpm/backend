@@ -509,6 +509,15 @@ class DeviceViewSet(viewsets.ModelViewSet):  # 不使用 BaseViewSet，因为权
                     device_identifier = device_info.get('device_identifier')
                     ip = device_info.get('ip')
                     port = device_info.get('port', 5000)
+                    
+                    # 设置设备的CONTROLLER_URL
+                    from utils.device_client import get_device_client
+
+                    client = get_device_client()
+                    result = client.set_device_controller_url(ip, port)
+                    if not result.success:
+                        errors.append(f"设置设备 {device_identifier} 的CONTROLLER_URL失败: {result.error}")
+                        continue
 
                     if not device_identifier or not ip:
                         errors.append(f"设备信息不完整: {device_info}")
