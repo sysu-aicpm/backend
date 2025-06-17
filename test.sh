@@ -33,7 +33,7 @@
 #!/bin/bash
 
 # --- Configuration ---
-SERVER_ADDRESS="http://127.0.0.1:8000"
+SERVER_ADDRESS="http://127.0.0.1:8080"
 API_BASE_URL="${SERVER_ADDRESS}/api/v1"
 
 # Credentials for an existing admin user (LOGIN IS NOW EMAIL-BASED)

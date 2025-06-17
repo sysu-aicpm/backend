@@ -47,7 +47,7 @@ class UserListView(generics.ListAPIView):
     queryset = User.objects.all().order_by('id')
     serializer_class = UserSerializer
     permission_classes = [IsAdminUser]
-
+    pagination_class = None
 
 # --- 通用视图 ---
 class BaseViewSet(viewsets.ModelViewSet):
