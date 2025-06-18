@@ -4,8 +4,6 @@ on:
   schedule:
     - cron: '20 07 * * *'  # 每天 UTC 时间 07:20，对应北京时间 15:20
   push:
-    branches: 
-      - main
     tags: 
       - 'v*.*.*'
   pull_request:
